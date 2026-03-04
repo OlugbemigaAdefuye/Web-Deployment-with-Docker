@@ -1,70 +1,113 @@
 # Deploying a Dockerized Web Application on AWS EC2
 
-This repository demonstrates how to deploy a web application using Docker on an AWS EC2 instance and connect to the server using VS Code Remote SSH.
+This project demonstrates how to deploy a **Dockerized web application** on an **AWS EC2 instance** and connect to it using **VS Code Remote SSH**.
 
-The goal is to provision an EC2 instance, install Docker automatically using user-data, deploy a containerised application, and access it via the browser.
+The process includes:
+
+1. Launching an EC2 instance
+2. Automatically installing Docker using a **user-data script**
+3. Connecting to the instance using **VS Code Remote SSH**
+4. Building a Docker image from a **Dockerfile**
+5. Running the containerized application
+6. Accessing the application via a browser
 
 ---
 
 # Architecture Overview
 
-Components used in this deployment:
+The deployment uses the following components:
 
-* Amazon Web Services EC2 instance
-* Docker for containerized application deployment
-* Visual Studio Code with Remote SSH extension
-* Linux-based EC2 server (Ubuntu recommended)
+* Amazon Web Services EC2
+* Docker for container runtime
+* Visual Studio Code Remote SSH extension
+* Ubuntu Linux EC2 instance
 
-The application runs inside a Docker container and is accessible through the EC2 public IP address on port 3000.
+The application runs inside a Docker container and is exposed via **port 3000**.
 
 ---
 
 # Prerequisites
 
-Before starting, ensure you have:
+Ensure you have the following before starting:
 
-* An AWS account
-* An EC2 instance running (Ubuntu recommended)
-* A configured Security Group allowing:
+* AWS account
+* SSH key pair (.pem)
+* Visual Studio Code
+* VS Code Remote SSH extension installed
+
+Security group must allow:
 
 ```
 SSH (22)
-HTTP (optional)
-Custom TCP: 3000
-```
-
-* Installed locally:
-
-```
-Docker (optional if deploying locally)
-Visual Studio Code
-VS Code Remote SSH Extension
+Custom TCP (3000)
 ```
 
 ---
 
-# Step 1 — Launch EC2 Instance
+# Step 1 — Launch the EC2 Instance
 
-1. Log into AWS Console.
-2. Navigate to EC2 Dashboard.
-3. Click Launch Instance.
-4. Choose an Ubuntu Server AMI.
-5. Select instance type (e.g., `t2.micro` or `t3.micro`).
-6. Create or select an existing Key Pair.
-7. Configure Security Group rules:
+Login to AWS Console.
+
+Navigate to:
 
 ```
-SSH: 22
-Custom TCP: 3000
+EC2 → Launch Instance
 ```
 
-8. Launch the instance.
+Configuration:
+
+* AMI: **Ubuntu Server**
+* Instance type: `t2.micro` or `t3.micro`
+* Key pair: create or select an existing key
+* Security group rules:
+
+```
+SSH (22)
+Custom TCP (3000)
+```
 
 ---
 
-# Step 2 — Copy the Key Pair Path
+# Step 2 — Install Docker Automatically Using user_data.sh
 
-Locate the downloaded `.pem` key pair.
+During EC2 launch configuration, use **User Data** to install Docker automatically.
+
+Paste the following script into the **User Data** field:
+
+```bash
+#!/bin/bash
+
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg
+
+install -m 0755 -d /etc/apt/keyrings
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+| gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+ARCH=$(dpkg --print-architecture)
+CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+
+echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $CODENAME stable" \
+> /etc/apt/sources.list.d/docker.list
+
+apt-get update -y
+
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+systemctl enable docker
+systemctl start docker
+```
+
+This script installs Docker automatically when the instance starts.
+
+---
+
+# Step 3 — Locate Your Key Pair
+
+Download your `.pem` file during instance creation.
 
 Example:
 
@@ -72,15 +115,15 @@ Example:
 my-keypair.pem
 ```
 
-Copy the absolute path of the file.
-
-Depending on your OS:
+Copy the **absolute path** of the key.
 
 ### Windows
 
-Right-click the key file → Copy as Path
+Right-click → **Copy as Path**
 
 ### macOS / Linux
+
+Use:
 
 ```
 pwd
@@ -90,38 +133,41 @@ or drag the file into the terminal.
 
 ---
 
-# Step 3 — Set Correct Key Permissions
+# Step 4 — Set Key Permissions
 
-Run the following command in the terminal:
+Run:
 
 ```
 chmod 400 my-keypair.pem
 ```
 
-This ensures the key is secure and usable for SSH authentication.
+This is required for SSH authentication.
 
 ---
 
-# Step 4 — Connect to EC2 Using VS Code
+# Step 5 — Connect to the EC2 Instance Using VS Code
 
-Open Visual Studio Code.
+Open **Visual Studio Code**.
 
-Install the extension:
+Install extension:
 
 ```
 Remote - SSH
 ```
 
-Then connect:
+Then:
 
-1. Press Ctrl + Shift + P
-2. Select:
+```
+Ctrl + Shift + P
+```
+
+Select:
 
 ```
 Remote-SSH: Connect to Host
 ```
 
-Use the command format:
+Connect using:
 
 ```
 ssh -i /path/to/keypair.pem ubuntu@<EC2_PUBLIC_IP>
@@ -133,61 +179,81 @@ Example:
 ssh -i ~/keys/my-keypair.pem ubuntu@3.120.45.88
 ```
 
-If prompted:
+Select:
 
 ```
-Select Linux
+Linux
 ```
 
-Click Connect.
+Click **Connect**.
 
 ---
 
-# Step 5 — Open the Instance Folder
+# Step 6 — Verify Docker Installation
 
-Once connected:
-
-1. Click Open Folder
-2. Select the home directory
-3. Click OK
-
-You are now connected to the EC2 instance via VS Code.
-
----
-
-# Step 6 — Confirm Docker Installation
-
-Docker should already be installed via the EC2 user-data script.
-
-Verify installation:
+Confirm Docker was installed successfully:
 
 ```
 docker --version
 ```
 
-You should see output similar to:
+Expected output:
 
 ```
-Docker version 25.x.x
+Docker version xx.x.x
 ```
 
-Also confirm the service is running:
+Also confirm the Docker service is running:
 
 ```
-docker ps
+systemctl status docker
 ```
 
 ---
 
-# Step 7 — Run the Application Container
+# Step 7 — Build the Docker Image
 
-Run the Docker container:
+Before running the container, build the image from the **Dockerfile**.
+
+Navigate to your project directory.
+
+Run:
 
 ```
-docker run -d -p 3000:3000 <image-name>
+docker build -t my-node-app .
 ```
 
-Check running containers:
+This command creates the Docker image.
+
+Confirm image creation:
+
+```
+docker images
+```
+
+---
+
+# Step 8 — Run the Docker Container
+
+Now start the container from the image:
+
+```
+docker run -d -p 3000:3000 --name myapp my-node-app
+```
+
+Explanation:
+
+```
+-d        run in background
+-p        map ports
+--name    container name
+```
+
+---
+
+# Step 9 — Inspect Running Containers
+
+To see running containers:
 
 ```
 docker ps
@@ -197,14 +263,14 @@ Example output:
 
 ```
 CONTAINER ID   IMAGE         PORTS
-abcd1234       my-node-app   0.0.0.0:3000->3000
+abc123         my-node-app   0.0.0.0:3000->3000
 ```
 
 ---
 
-# Step 8 — Access the Application
+# Step 10 — Access the Application
 
-Open your browser and navigate to:
+Open a browser and navigate to:
 
 ```
 http://<EC2_PUBLIC_IP>:3000
@@ -216,8 +282,6 @@ Example:
 http://3.120.45.88:3000
 ```
 
-If the page loads successfully, your container is running correctly.
-
 Note:
 
 If running locally instead of EC2:
@@ -228,11 +292,9 @@ http://localhost:3000
 
 ---
 
-# Step 9 — Stop the Container
+# Step 11 — Stop the Container
 
-To stop the running container:
-
-First list containers:
+List containers:
 
 ```
 docker ps
@@ -240,7 +302,7 @@ docker ps
 
 Copy the container ID.
 
-Then stop the container:
+Stop container:
 
 ```
 docker stop <CONTAINER_ID>
@@ -249,12 +311,12 @@ docker stop <CONTAINER_ID>
 Example:
 
 ```
-docker stop abcd1234
+docker stop abc123
 ```
 
 ---
 
-# Step 10 — Confirm Container Stopped
+# Step 12 — Confirm Container Has Stopped
 
 Run:
 
@@ -268,22 +330,40 @@ If no containers appear, the container has stopped successfully.
 
 # Useful Docker Commands
 
-List containers
+Build image
+
+```
+docker build -t my-node-app .
+```
+
+List images
+
+```
+docker images
+```
+
+Run container
+
+```
+docker run -d -p 3000:3000 my-node-app
+```
+
+List running containers
 
 ```
 docker ps
-```
-
-List all containers
-
-```
-docker ps -a
 ```
 
 Stop container
 
 ```
 docker stop <container-id>
+```
+
+Start container again
+
+```
+docker start <container-id>
 ```
 
 Remove container
@@ -296,22 +376,22 @@ docker rm <container-id>
 
 # Common Troubleshooting
 
-### Cannot SSH to instance
+### Cannot SSH to EC2
 
 Check:
 
-* Key permissions (`chmod 400`)
+* Correct key permissions (`chmod 400`)
+* Security group allows port **22**
 * Correct username (`ubuntu`)
-* Security group allows port 22
 
 ---
 
-### Cannot access application
+### Cannot access the application
 
 Ensure:
 
-* Port 3000 is open in the EC2 Security Group
-* Docker container is running:
+* Port **3000** is open in EC2 Security Group
+* Container is running:
 
 ```
 docker ps
@@ -319,21 +399,25 @@ docker ps
 
 ---
 
-### Docker command not found
+### Docker not installed
 
-Restart the instance or ensure Docker installed via user-data script.
+Check user-data logs:
+
+```
+/var/log/cloud-init-output.log
+```
 
 ---
 
 # Project Structure
 
-Example repository structure:
+Example project layout:
 
 ```
 project/
 │
 ├── Dockerfile
-├── docker-compose.yml
+├── user_data.sh
 ├── server.js
 ├── dist/
 ├── package.json
@@ -343,12 +427,13 @@ project/
 
 ---
 
-# Conclusion
+# Summary
 
 This guide demonstrated how to:
 
-* Launch an AWS EC2 instance
-* Install Docker automatically
-* Connect using VS Code Remote SSH
-* Deploy and run a containerized web application
-* Access the application via a browser
+* Launch an EC2 instance
+* Install Docker automatically using **user-data**
+* Connect via **VS Code Remote SSH**
+* Build a Docker image from a Dockerfile
+* Run the application container
+* Access the application through the EC2 public IP
